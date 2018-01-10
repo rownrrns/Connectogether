@@ -52,7 +52,7 @@
             <View
                 android:layout_height="2dip"
                 android:layout_width="fill_parent"
-                android:background="@color/yellow"
+                android:background="@color/green"
                 android:layout_marginTop="5dp"/>
             <LinearLayout
                 android:layout_width="match_parent"
@@ -87,7 +87,7 @@
                     android:id="@+id/youandi_room_num"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="3"
+                    android:text=""
                     android:textSize="20dp"
                     android:layout_marginLeft="10dp"
                     android:typeface="monospace"
@@ -98,14 +98,14 @@
             <View
                 android:layout_height="2dip"
                 android:layout_width="fill_parent"
-                android:background="@color/yellow"
+                android:background="@color/green"
                 />
             <View
 
                 android:layout_marginTop="5dp"
                 android:layout_height="2dip"
                 android:layout_width="fill_parent"
-                android:background="@color/yellow"
+                android:background="@color/green"
                 />
             <LinearLayout
                 android:layout_width="match_parent"
@@ -141,7 +141,7 @@
                     android:id="@+id/youandi_distance"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="3km"
+                    android:text=""
                     android:textSize="20dp"
                     android:layout_marginLeft="10dp"
                     android:typeface="monospace"
@@ -153,7 +153,7 @@
             <View
                 android:layout_height="2dip"
                 android:layout_width="fill_parent"
-                android:background="@color/yellow"
+                android:background="@color/green"
                 android:layout_marginBottom="10dp"
                 />
             <RelativeLayout

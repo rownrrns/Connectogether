@@ -1,11 +1,15 @@
 package com.example.user.youandi;
+
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.location.Address;
-import android.location.Geocoder;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Build;
@@ -13,6 +17,7 @@ import android.os.Bundle;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.Fragment;
 import android.support.v4.content.ContextCompat;
@@ -21,8 +26,7 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
-import android.widget.EditText;
+import android.view.WindowManager;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
 
@@ -42,7 +46,6 @@ import com.google.android.gms.location.places.ui.PlaceAutocompleteFragment;
 import com.google.android.gms.location.places.ui.PlaceSelectionListener;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.MapsInitializer;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -51,9 +54,7 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
-import java.io.IOException;
-import java.util.List;
-import java.util.Locale;
+import java.util.ArrayList;
 
 /**
  * Created by KJH on 2017-05-15.
@@ -89,40 +90,47 @@ import java.util.Locale;
  */
 
 public class Home extends Fragment
-        implements OnMapReadyCallback ,
+        implements OnMapReadyCallback,
         GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener,
-        LocationListener
-{
+        LocationListener {
     private static final LatLng DEFAULT_LOCATION = new LatLng(37.56, 126.97);
     private static final String TAG = "googlemap_example";
     private static final int GPS_ENABLE_REQUEST_CODE = 2001;
     private static final int PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION = 2002;
     private static final int UPDATE_INTERVAL_MS = 15000;
     private static final int FASTEST_UPDATE_INTERVAL_MS = 15000;
-
+    private boolean CHECK = false;
+    private boolean DOINGSEARCH = false;
     private GoogleMap googleMap = null;
     private MapView mapView = null;
     private GoogleApiClient googleApiClient = null;
+    private GoogleApiClient MaingoogleApiClient = null;
     private Marker currentMarker = null;
-
+    private FloatingActionButton currentBtn;
     private final static int MAXENTRIES = 5;
     private String[] LikelyPlaceNames = null;
     private String[] LikelyAddresses = null;
     private String[] LikelyAttributions = null;
     private LatLng[] LikelyLatLngs = null;
 
-    public Home()
-    {
+    SensorManager sensorManager;
+    MySensorListener mySensorListener;
+    private CompassView mCompassView;
+    private boolean mCompassEnabled;
+    private RelativeLayout home_relativelayout;
+    PlaceAutocompleteFragment autocompleteFragment;
+
+    public Home() {
         // required
     }
 
     public void setCurrentLocation(Location location, String markerTitle, String markerSnippet) {
-        if ( currentMarker != null ) currentMarker.remove();
+        if (currentMarker != null) currentMarker.remove();
 
-        if ( location != null) {
+        if (location != null) {
             //현재위치의 위도 경도 가져옴
-            LatLng currentLocation = new LatLng( location.getLatitude(), location.getLongitude());
+            LatLng currentLocation = new LatLng(location.getLatitude(), location.getLongitude());
 
             MarkerOptions markerOptions = new MarkerOptions();
             markerOptions.position(currentLocation);
@@ -152,16 +160,49 @@ public class Home extends Fragment
         super.onCreate(savedInstanceState);
     }
 
+    //http://tristan91.tistory.com/137
     @Nullable
     @Override
     public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         View layout = inflater.inflate(R.layout.fragment_home, container, false);
-
-        mapView = (MapView)layout.findViewById(R.id.home_map);
+        mapView = (MapView) layout.findViewById(R.id.home_map);
         mapView.getMapAsync(this);
 
-        PlaceAutocompleteFragment autocompleteFragment = (PlaceAutocompleteFragment)
+        //나침반
+        home_relativelayout = (RelativeLayout) layout.findViewById(R.id.home_relative);
+        sensorManager = (SensorManager) getActivity().getSystemService(Context.SENSOR_SERVICE);
+        mySensorListener = new MySensorListener();
+        boolean sideBottom = true;
+        mCompassView = new CompassView(getActivity());
+        mCompassView.setVisibility(View.VISIBLE);
+
+        RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(
+                RelativeLayout.LayoutParams.WRAP_CONTENT,
+                RelativeLayout.LayoutParams.WRAP_CONTENT);
+        params.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
+        params.addRule(sideBottom ? RelativeLayout.ALIGN_PARENT_BOTTOM : RelativeLayout.ALIGN_PARENT_TOP);
+        home_relativelayout.addView(mCompassView, params);
+        mCompassEnabled = true;
+
+
+        //현재위치
+        currentBtn = (FloatingActionButton) layout.findViewById(R.id.home_current);
+        currentBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View view) {
+                if (ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    return;
+                }
+                googleApiClient = MaingoogleApiClient;
+                googleApiClient.connect();
+                Toast.makeText(getContext(), "현재 위치", Toast.LENGTH_SHORT).show();
+                searchCurrentPlaces();
+
+            }
+        });
+
+        autocompleteFragment = (PlaceAutocompleteFragment)
                 getActivity().getFragmentManager().findFragmentById(R.id.place_autocomplete_fragment);
+
 
         autocompleteFragment.setOnPlaceSelectedListener(new PlaceSelectionListener() {
             @Override
@@ -179,8 +220,10 @@ public class Home extends Fragment
             }
         });
 
+
         return layout;
     }
+
 
     @Override
     public void onStart() {
@@ -193,8 +236,10 @@ public class Home extends Fragment
         super.onStop();
         mapView.onStop();
 
-        if ( googleApiClient != null && googleApiClient.isConnected())
+        if (googleApiClient != null && googleApiClient.isConnected()) {
             googleApiClient.disconnect();
+            googleApiClient = null;
+        }
     }
 
     @Override
@@ -208,9 +253,12 @@ public class Home extends Fragment
         super.onResume();
         mapView.onResume();
 
-        if ( googleApiClient != null)
+        if (googleApiClient != null)
             googleApiClient.connect();
-
+        if (mCompassEnabled) {
+            sensorManager.registerListener(mySensorListener,
+                    sensorManager.getDefaultSensor(Sensor.TYPE_ORIENTATION), SensorManager.SENSOR_DELAY_UI);
+        }
     }
 
     @Override
@@ -218,9 +266,34 @@ public class Home extends Fragment
         super.onPause();
         mapView.onPause();
 
-        if ( googleApiClient != null && googleApiClient.isConnected()) {
+        if (googleApiClient != null && googleApiClient.isConnected()) {
             LocationServices.FusedLocationApi.removeLocationUpdates(googleApiClient, this);
             googleApiClient.disconnect();
+            googleApiClient = null;
+        }
+        if (mCompassEnabled) {
+            sensorManager.unregisterListener(mySensorListener);
+        }
+    }
+
+    class MySensorListener implements SensorEventListener {
+        private int iOrientation = -1;
+
+        @SuppressLint("WrongConstant")
+        @Override
+        public void onSensorChanged(SensorEvent sensorEvent) {
+            Log.d("MySensorListener", "sensor #0 " + sensorEvent.values[0]);
+            if (iOrientation < 0) {
+                iOrientation = ((WindowManager) getActivity().getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getRotation();
+            }
+            Log.d("Orientation", String.valueOf(iOrientation));
+            mCompassView.setAzimuth(sensorEvent.values[0]+90*iOrientation);
+            mCompassView.invalidate();
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int i) {
+
         }
     }
 
@@ -235,17 +308,26 @@ public class Home extends Fragment
         super.onDestroy();
         mapView.onLowMemory();
 
-        if ( googleApiClient != null ) {
+        if (googleApiClient != null) {
             googleApiClient.unregisterConnectionCallbacks(this);
             googleApiClient.unregisterConnectionFailedListener(this);
 
-            if ( googleApiClient.isConnected()) {
+            if (googleApiClient.isConnected()) {
                 LocationServices.FusedLocationApi.removeLocationUpdates(googleApiClient, this);
                 googleApiClient.disconnect();
+                googleApiClient = null;
             }
         }
+
     }
 
+    /*
+        public void onDestroyView() {
+            super.onDestroyView();
+            if (autocompleteFragment != null)
+               getActivity().getFragmentManager().beginTransaction().remove(autocompleteFragment).commit();
+        }
+        */
     @Override
     public void onActivityCreated(@Nullable Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
@@ -253,8 +335,7 @@ public class Home extends Fragment
         //액티비티가 처음 생성될 때 실행되는 함수
         MapsInitializer.initialize(getActivity().getApplicationContext());
 
-        if(mapView != null)
-        {
+        if (mapView != null) {
             mapView.onCreate(savedInstanceState);
         }
     }
@@ -278,24 +359,23 @@ public class Home extends Fragment
             // 사용권한체크
             int hasFineLocationPermission = ContextCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION);
 
-            if ( hasFineLocationPermission == PackageManager.PERMISSION_DENIED) {
+            if (hasFineLocationPermission == PackageManager.PERMISSION_DENIED) {
                 //사용권한이 없을경우
                 //권한 재요청
                 ActivityCompat.requestPermissions(getActivity(), new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION);
             } else {
                 //사용권한이 있는경우
-                if ( googleApiClient == null) {
+                if (googleApiClient == null) {
                     buildGoogleApiClient();
                 }
 
-                if ( ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
-                {
+                if (ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                     googleMap.setMyLocationEnabled(true);
                 }
             }
         } else {
 
-            if ( googleApiClient == null) {
+            if (googleApiClient == null) {
                 buildGoogleApiClient();
             }
 
@@ -306,7 +386,8 @@ public class Home extends Fragment
     }
 
     private void buildGoogleApiClient() {
-        googleApiClient = new GoogleApiClient.Builder(getActivity())
+
+        MaingoogleApiClient = new GoogleApiClient.Builder(getActivity())
                 .addConnectionCallbacks(this)
                 .addOnConnectionFailedListener(this)
                 .addApi(LocationServices.API)
@@ -314,6 +395,7 @@ public class Home extends Fragment
                 .addApi(Places.PLACE_DETECTION_API)
                 .enableAutoManage(getActivity(), this)
                 .build();
+        googleApiClient = MaingoogleApiClient;
         googleApiClient.connect();
     }
 
@@ -326,7 +408,7 @@ public class Home extends Fragment
 
     @Override
     public void onConnected(@Nullable Bundle bundle) {
-        if ( !checkLocationServicesStatus()) {
+        if (!checkLocationServicesStatus()) {
             AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
             builder.setTitle("위치 서비스 비활성화");
             builder.setMessage("앱을 사용하기 위해서는 위치 서비스가 필요합니다.\n" +
@@ -340,7 +422,7 @@ public class Home extends Fragment
                     startActivityForResult(callGPSSettingIntent, GPS_ENABLE_REQUEST_CODE);
                 }
             });
-            builder.setNegativeButton("취소", new DialogInterface.OnClickListener(){
+            builder.setNegativeButton("취소", new DialogInterface.OnClickListener() {
                 @Override
                 public void onClick(DialogInterface dialogInterface, int i) {
                     dialogInterface.cancel();
@@ -354,8 +436,8 @@ public class Home extends Fragment
         locationRequest.setInterval(UPDATE_INTERVAL_MS);
         locationRequest.setFastestInterval(FASTEST_UPDATE_INTERVAL_MS);
 
-        if ( Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if ( ActivityCompat.checkSelfPermission(getActivity(),
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ActivityCompat.checkSelfPermission(getActivity(),
                     Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
 
                 LocationServices.FusedLocationApi
@@ -373,11 +455,11 @@ public class Home extends Fragment
 
     @Override
     public void onConnectionSuspended(int cause) {
-        if ( cause ==  CAUSE_NETWORK_LOST )
+        if (cause == CAUSE_NETWORK_LOST)
             Log.e(TAG, "onConnectionSuspended(): Google Play services " +
                     "connection lost.  Cause: network lost.");
-        else if (cause == CAUSE_SERVICE_DISCONNECTED )
-            Log.e(TAG,"onConnectionSuspended():  Google Play services " +
+        else if (cause == CAUSE_SERVICE_DISCONNECTED)
+            Log.e(TAG, "onConnectionSuspended():  Google Play services " +
                     "connection lost.  Cause: service disconnected");
 
     }
@@ -395,45 +477,53 @@ public class Home extends Fragment
     @Override
     public void onLocationChanged(Location location) {
         Log.i(TAG, "onLocationChanged call..");
+
         searchCurrentPlaces();
     }
 
+
     private void searchCurrentPlaces() {
-        @SuppressWarnings("MissingPermission")
-        PendingResult<PlaceLikelihoodBuffer> result = Places.PlaceDetectionApi
-                .getCurrentPlace(googleApiClient, null);
-        result.setResultCallback(new ResultCallback<PlaceLikelihoodBuffer>(){
 
-            @Override
-            public void onResult(@NonNull PlaceLikelihoodBuffer placeLikelihoods) {
-                int i = 0;
-                LikelyPlaceNames = new String[MAXENTRIES];
-                LikelyAddresses = new String[MAXENTRIES];
-                LikelyAttributions = new String[MAXENTRIES];
-                LikelyLatLngs = new LatLng[MAXENTRIES];
+        if (googleApiClient != null) {
+            @SuppressWarnings("MissingPermission")
+            PendingResult<PlaceLikelihoodBuffer> result = Places.PlaceDetectionApi
+                    .getCurrentPlace(googleApiClient, null);
+            result.setResultCallback(new ResultCallback<PlaceLikelihoodBuffer>() {
 
-                for(PlaceLikelihood placeLikelihood : placeLikelihoods) {
-                    LikelyPlaceNames[i] = (String) placeLikelihood.getPlace().getName();
-                    LikelyAddresses[i] = (String) placeLikelihood.getPlace().getAddress();
-                    LikelyAttributions[i] = (String) placeLikelihood.getPlace().getAttributions();
-                    LikelyLatLngs[i] = placeLikelihood.getPlace().getLatLng();
+                @Override
+                public void onResult(@NonNull PlaceLikelihoodBuffer placeLikelihoods) {
+                    int i = 0;
+                    LikelyPlaceNames = new String[MAXENTRIES];
+                    LikelyAddresses = new String[MAXENTRIES];
+                    LikelyAttributions = new String[MAXENTRIES];
+                    LikelyLatLngs = new LatLng[MAXENTRIES];
 
-                    i++;
-                    if(i > MAXENTRIES - 1 ) {
-                        break;
+                    for (PlaceLikelihood placeLikelihood : placeLikelihoods) {
+                        LikelyPlaceNames[i] = (String) placeLikelihood.getPlace().getName();
+                        LikelyAddresses[i] = (String) placeLikelihood.getPlace().getAddress();
+                        LikelyAttributions[i] = (String) placeLikelihood.getPlace().getAttributions();
+                        LikelyLatLngs[i] = placeLikelihood.getPlace().getLatLng();
+
+                        i++;
+                        if (i > MAXENTRIES - 1) {
+                            break;
+                        }
                     }
+
+                    Log.d("비어있다.2222", googleApiClient.toString());
+                    placeLikelihoods.release();
+
+                    Location location = new Location("");
+                    location.setLatitude(LikelyLatLngs[0].latitude);
+                    location.setLongitude(LikelyLatLngs[0].longitude);
+                    Log.d("비어있다.2222", location.toString());
+                    setCurrentLocation(location, LikelyPlaceNames[0], LikelyAddresses[0]);
                 }
+            });
+        }
 
-                placeLikelihoods.release();
-
-                Location location = new Location("");
-                location.setLatitude(LikelyLatLngs[0].latitude);
-                location.setLongitude(LikelyLatLngs[0].longitude);
-
-                setCurrentLocation(location, LikelyPlaceNames[0], LikelyAddresses[0]);
-            }
-        });
 
     }
-}
 
+
+}
