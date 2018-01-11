@@ -44,7 +44,9 @@ import static android.content.Context.SENSOR_SERVICE;
 
 public class Youandi extends Fragment {
     FloatingActionButton loginBtn;
+    FloatingActionButton logoutBtn;
     TextView distanceview;
+    ImageView goal;
     int room_num;
     public Youandi() {
         // Required empty public constructor
@@ -61,7 +63,7 @@ public class Youandi extends Fragment {
 
     SensorManager sensorManager;
     rotationlistner mySensorListener;
-    private CompassView mCompassView;
+    private UICompassView mCompassView;
     private boolean mCompassEnabled;
     private RelativeLayout youandi_relativelayout;
     PlaceAutocompleteFragment autocompleteFragment;
@@ -85,12 +87,22 @@ public class Youandi extends Fragment {
         View view = inflater.inflate(R.layout.fragment_youandi, container, false);
 
         loginBtn=(FloatingActionButton) view.findViewById(R.id.youandi_login);
-
-        loginBtn.setOnClickListener(new View.OnClickListener(){
+        logoutBtn=(FloatingActionButton) view.findViewById(R.id.youandi_setting);
+        View.OnClickListener btnlistener = new View.OnClickListener() {
+            @Override
             public void onClick(View view){
-                login_show();
+                switch (view.getId()) {
+                    case R.id.youandi_login:
+                        login_show();
+                        break;
+                    case R.id.youandi_setting:
+                        logout_show();
+                        break;
+                }
             }
-        });
+        };
+        loginBtn.setOnClickListener(btnlistener);
+        logoutBtn.setOnClickListener(btnlistener);
         mSocket.on("newlocdata", getcounterlocations);
 
         // Location 제공자에서 정보를 얻어오기(GPS)
@@ -109,7 +121,7 @@ public class Youandi extends Fragment {
         youandi_relativelayout = (RelativeLayout) view.findViewById(R.id.youandi_relative);
         sensorManager = (SensorManager) getActivity().getSystemService(Context.SENSOR_SERVICE);
         boolean sideBottom = true;
-        mCompassView = new CompassView(getActivity());
+        mCompassView = new UICompassView(getActivity());
         mCompassView.setVisibility(View.VISIBLE);
         mySensorListener = new rotationlistner();
         RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(
@@ -174,7 +186,13 @@ public class Youandi extends Fragment {
                 distance = PersonDistance( String.valueOf(location.getLatitude()), String.valueOf(location.getLongitude()), CounterData.getString("latitude"), CounterData.getString("longitude"));
                 directions = PersonDirection(location_data.getString("latitude"), location_data.getString("longitude"), CounterData.getString("latitude"), CounterData.getString("longitude"));
                 distanceview = (TextView) getActivity().findViewById(R.id.youandi_distance);
-                distanceview.setText(Double.toString(distance));
+                distanceview.setText(String.valueOf((int)distance) + "m");
+                goal = (ImageView) getActivity().findViewById(R.id.youandi_arrow);
+                if(distance < 5 && distance >0){
+                    goal.setVisibility(View.VISIBLE);
+                }else{
+                    goal.setVisibility(View.GONE);
+                }
             }catch (JSONException e){
                 e.printStackTrace();
             }
@@ -219,7 +237,7 @@ public class Youandi extends Fragment {
         double lon2 = Double.parseDouble(Lon2);
 
         return Math.acos(Math.cos(Math.toRadians(90-lat1))*Math.cos(Math.toRadians(90-lat2))
-                +Math.sin(Math.toRadians(90-lat1))*Math.sin(Math.toRadians(90-lat2))*Math.cos(Math.toRadians(lon1-lon2)))*6378137;
+                +Math.sin(Math.toRadians(90-lat1))*Math.sin(Math.toRadians(90-lat2))*Math.cos(Math.toRadians(lon1-lon2)))*6358030.94791;
     }
 
     public static double PersonDirection(String Lat1, String Lon1, String Lat2, String Lon2) {
@@ -227,22 +245,50 @@ public class Youandi extends Fragment {
         double lon1 = Math.toRadians(Double.parseDouble(Lon1));
         double lat2 = Math.toRadians(Double.parseDouble(Lat2));
         double lon2 = Math.toRadians(Double.parseDouble(Lon2));
-
+        double lonL = lon2 - lon1;
+        double radbearing;
         if(lat1 == lat2 && lon1 == lon2){
             return 0.0;
         }
-        double raddist = 0.0;
-        raddist = Math.acos(Math.sin(lat1)*Math.sin(lat2)+Math.cos(lat1)*Math.cos(lat2)*Math.cos(lon1-lon2));
-        double radbearing = Math.acos((Math.sin(lat2)-Math.sin(lat1)*Math.cos(raddist)) / (Math.cos(lat1)*Math.sin(raddist)));
+        if(Math.sin(lonL) > 0) {
+            radbearing = Math.atan(Math.sin(lonL) / (Math.cos(lat1) * Math.tan(lat2) - Math.sin(lat1) * Math.cos(lonL)));
+        }else{
+            radbearing = Math.atan(Math.sin(360-lonL) / (Math.cos(lat2) * Math.tan(lat1) - Math.sin(lat2) * Math.cos(360-lonL)));
+        }
 
         double true_bearing = 0.0;
         if (Math.sin(lon2 - lon1) < 0){
-            true_bearing = Math.toDegrees(radbearing);
+            true_bearing = 360 - Math.toDegrees(radbearing);
+
         } else {
             true_bearing = Math.toDegrees(radbearing);
         }
 
         return true_bearing;
+    }
+
+    void logout_show() {
+        final EditText edittext = new EditText(getActivity());
+        AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+        final TextView room_num_text = (TextView) getActivity().findViewById(R.id.youandi_room_num);
+        builder.setTitle("Logout");
+        builder.setMessage("방에서 나가시겠습니까?.");
+        builder.setNegativeButton("예",
+                new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+                        mSocket.emit("leaveRoom", roomtest);
+                        roomtest.remove("room");
+                        room_num_text.setText("");
+                        Toast.makeText(getActivity(),"다음에 또 봐요!" ,Toast.LENGTH_LONG).show();
+                    }
+                });
+        builder.setPositiveButton("취소",
+                new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+                        Toast.makeText(getActivity(),"취소되었습니다." ,Toast.LENGTH_LONG).show();
+                    }
+                });
+        builder.show();
     }
 
     void login_show() {
@@ -252,7 +298,7 @@ public class Youandi extends Fragment {
         builder.setTitle("Login");
         builder.setMessage("방번호를 입력하세요.");
         builder.setView(edittext);
-        builder.setPositiveButton("입력",
+        builder.setNegativeButton("입력",
                 new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int which) {
                         mSocket.connect();
@@ -286,10 +332,9 @@ public class Youandi extends Fragment {
                         } catch (JSONException e) {
                             e.printStackTrace();
                         }
-                        Toast.makeText(getActivity(),"방번호 : "+edittext.getText().toString() ,Toast.LENGTH_LONG).show();
                     }
                 });
-        builder.setNegativeButton("취소",
+        builder.setPositiveButton("취소",
                 new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int which) {
                         Toast.makeText(getActivity(),"취소되었습니다." ,Toast.LENGTH_LONG).show();
@@ -327,7 +372,7 @@ public class Youandi extends Fragment {
                 iOrientation = ((WindowManager) getActivity().getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getRotation();
             }
             Log.d("Orientation", String.valueOf(iOrientation));
-            mCompassView.setAzimuth(sensorEvent.values[0] - 90 * iOrientation);
+            mCompassView.setAzimuth(-sensorEvent.values[0]+(float) directions);
             mCompassView.invalidate();
         }
 

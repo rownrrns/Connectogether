@@ -169,12 +169,15 @@
                 android:layout_marginTop="10dp"
 
                 >
+
                 <ImageView
                     android:id="@+id/youandi_arrow"
-                    android:layout_width="250dp"
-                    android:layout_height="250dp"
-                    app:srcCompat="@drawable/ic_arrow_upward_black_24dp"
-                    android:layout_centerInParent="true"/>
+                    android:layout_width="500dp"
+                    android:layout_height="500dp"
+                    android:layout_centerHorizontal="true"
+                    android:layout_centerVertical="true"
+                    android:visibility="gone"
+                    app:srcCompat="@drawable/ic_location_searching_black_24dp" />
 
             </RelativeLayout>
         </LinearLayout>

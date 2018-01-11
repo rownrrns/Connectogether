@@ -29,7 +29,7 @@ public class CompassView extends View {
     protected void onDraw(Canvas canvas) {
         canvas.save();
 
-        canvas.rotate(-360 + mAzimuth, PADDING + mCompass.getMinimumWidth()
+        canvas.rotate( -360+mAzimuth, PADDING + mCompass.getMinimumWidth()
                 / 2, PADDING + mCompass.getMinimumHeight() / 2);
         mCompass.setBounds(PADDING, PADDING, PADDING
                 + mCompass.getMinimumWidth(), PADDING

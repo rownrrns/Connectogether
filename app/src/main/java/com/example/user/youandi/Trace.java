@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -30,6 +31,8 @@ import android.view.WindowManager;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
 
+import com.google.android.gms.maps.model.Polyline;
+import com.google.maps.android.SphericalUtil;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.PendingResult;
@@ -53,8 +56,12 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.PolylineOptions;
 
 import java.util.ArrayList;
+import java.util.List;
+
+import static com.google.maps.android.SphericalUtil.computeDistanceBetween;
 
 /**
  * Created by KJH on 2017-05-15.
@@ -89,7 +96,7 @@ import java.util.ArrayList;
  * 8. onMapReady();
  */
 
-public class Home extends Fragment
+public class Trace extends Fragment
         implements OnMapReadyCallback,
         GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener,
@@ -108,20 +115,31 @@ public class Home extends Fragment
     private GoogleApiClient MaingoogleApiClient = null;
     private Marker currentMarker = null;
     private FloatingActionButton currentBtn;
+    private FloatingActionButton showdistanceBtn;
     private final static int MAXENTRIES = 5;
     private String[] LikelyPlaceNames = null;
     private String[] LikelyAddresses = null;
     private String[] LikelyAttributions = null;
     private LatLng[] LikelyLatLngs = null;
 
+
     SensorManager sensorManager;
     MySensorListener mySensorListener;
     private CompassView mCompassView;
     private boolean mCompassEnabled;
-    private RelativeLayout home_relativelayout;
+    private RelativeLayout trace_relativelayout;
     PlaceAutocompleteFragment autocompleteFragment;
 
-    public Home() {
+    List<Polyline> polylines = new ArrayList<Polyline>();
+
+
+    private double polylineLength=0;
+    private Location mLastKnownLocation;
+    LatLng previousLocation = null;
+    LatLng nowLocation = null;
+    private boolean walkState = false;
+
+    public Trace() {
         // required
     }
 
@@ -131,6 +149,7 @@ public class Home extends Fragment
         if (location != null) {
             //현재위치의 위도 경도 가져옴
             LatLng currentLocation = new LatLng(location.getLatitude(), location.getLongitude());
+            nowLocation=currentLocation;
 
             MarkerOptions markerOptions = new MarkerOptions();
             markerOptions.position(currentLocation);
@@ -141,6 +160,18 @@ public class Home extends Fragment
             currentMarker = this.googleMap.addMarker(markerOptions);
 
             this.googleMap.moveCamera(CameraUpdateFactory.newLatLng(currentLocation));
+
+
+            if (previousLocation != null) {
+                this.googleMap.addPolyline(new PolylineOptions().geodesic(true).add(previousLocation, nowLocation));
+                polylines.add(this.googleMap.addPolyline(new PolylineOptions().geodesic(true).add(previousLocation, nowLocation)));
+
+            }
+
+            previousLocation = nowLocation;
+
+
+            //this.googleMap.addPolyline(new PolylineOptions().geodesic(true).add(new LatLng(36.3742825,127.3655115),new LatLng(36.3742156,127.3653641)));
             return;
         }
 
@@ -153,6 +184,7 @@ public class Home extends Fragment
         currentMarker = this.googleMap.addMarker(markerOptions);
 
         this.googleMap.moveCamera(CameraUpdateFactory.newLatLng(DEFAULT_LOCATION));
+
     }
 
     @Override
@@ -164,12 +196,12 @@ public class Home extends Fragment
     @Nullable
     @Override
     public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        View layout = inflater.inflate(R.layout.fragment_home, container, false);
-        mapView = (MapView) layout.findViewById(R.id.home_map);
+        View layout = inflater.inflate(R.layout.fragment_paper, container, false);
+        mapView = (MapView) layout.findViewById(R.id.trace_map);
         mapView.getMapAsync(this);
 
         //나침반
-        home_relativelayout = (RelativeLayout) layout.findViewById(R.id.home_relative);
+        trace_relativelayout = (RelativeLayout) layout.findViewById(R.id.trace_relative);
         sensorManager = (SensorManager) getActivity().getSystemService(Context.SENSOR_SERVICE);
         mySensorListener = new MySensorListener();
         boolean sideBottom = true;
@@ -181,12 +213,12 @@ public class Home extends Fragment
                 RelativeLayout.LayoutParams.WRAP_CONTENT);
         params.addRule(RelativeLayout.ALIGN_PARENT_LEFT);
         params.addRule(sideBottom ? RelativeLayout.ALIGN_PARENT_BOTTOM : RelativeLayout.ALIGN_PARENT_TOP);
-        home_relativelayout.addView(mCompassView, params);
+        trace_relativelayout.addView(mCompassView, params);
         mCompassEnabled = true;
 
 
         //현재위치
-        currentBtn = (FloatingActionButton) layout.findViewById(R.id.home_current);
+        currentBtn = (FloatingActionButton) layout.findViewById(R.id.trace_current);
         currentBtn.setOnClickListener(new View.OnClickListener() {
             public void onClick(View view) {
                 if (ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -199,6 +231,15 @@ public class Home extends Fragment
 
             }
         });
+        showdistanceBtn=(FloatingActionButton)layout.findViewById(R.id.trace_save) ;
+        showdistanceBtn.setOnClickListener(new View.OnClickListener(){
+
+            @Override
+            public void onClick(View view) {
+                distanceshow();
+            }
+        });
+
 
         autocompleteFragment = (PlaceAutocompleteFragment)
                 getActivity().getFragmentManager().findFragmentById(R.id.place_autocomplete_fragment);
@@ -223,6 +264,32 @@ public class Home extends Fragment
 
         return layout;
     }
+    void distanceshow(){
+        AlertDialog.Builder builder=new AlertDialog.Builder(getActivity());
+        builder.setTitle("내가 움직인 거리");
+        builder.setMessage(String.valueOf(polylineLength)+" m");
+        builder.setNegativeButton("확인 ", new DialogInterface.OnClickListener(){
+            public void onClick(DialogInterface dialog, int which){
+                Toast.makeText(getContext(),"조금만 더 움직여요!",Toast.LENGTH_LONG).show();
+            }
+        });
+        builder.setPositiveButton("삭제",
+                new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+                        polylineLength=0;
+                        for(Polyline line : polylines)
+                        {
+                            line.remove();
+                        }
+                        polylines.clear();
+                        googleMap.clear();
+
+                        Toast.makeText(getContext(),"새롭게 움직여요!",Toast.LENGTH_LONG).show();
+                    }
+                });
+        builder.show();
+    }
+
 
 
     @Override
@@ -245,7 +312,9 @@ public class Home extends Fragment
     @Override
     public void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
+
         mapView.onSaveInstanceState(outState);
+
     }
 
     @Override
@@ -271,7 +340,7 @@ public class Home extends Fragment
         if (googleApiClient != null && googleApiClient.isConnected()) {
             LocationServices.FusedLocationApi.removeLocationUpdates(googleApiClient, this);
             googleApiClient.disconnect();
-            googleApiClient = null;
+               googleApiClient = null;
         }
         if (mCompassEnabled) {
             sensorManager.unregisterListener(mySensorListener);
@@ -289,7 +358,7 @@ public class Home extends Fragment
                 iOrientation = ((WindowManager) getActivity().getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getRotation();
             }
             Log.d("Orientation", String.valueOf(iOrientation));
-            mCompassView.setAzimuth(sensorEvent.values[0]+90*iOrientation-90);
+            mCompassView.setAzimuth(sensorEvent.values[0] + 90 * iOrientation - 90);
             mCompassView.invalidate();
         }
 
@@ -317,11 +386,13 @@ public class Home extends Fragment
             if (googleApiClient.isConnected()) {
                 LocationServices.FusedLocationApi.removeLocationUpdates(googleApiClient, this);
                 googleApiClient.disconnect();
-                googleApiClient = null;
+                         googleApiClient = null;
             }
         }
 
     }
+
+
     public void onDestroyView() {
         super.onDestroyView();
         if (autocompleteFragment != null)
@@ -332,6 +403,7 @@ public class Home extends Fragment
             mapView.setVisibility(View.GONE);
         }
     }
+
     @Override
     public void onActivityCreated(@Nullable Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
@@ -418,7 +490,7 @@ public class Home extends Fragment
             builder.setMessage("앱을 사용하기 위해서는 위치 서비스가 필요합니다.\n" +
                     "위치 설정을 수정하십시오.");
             builder.setCancelable(true);
-            builder.setPositiveButton("설정", new DialogInterface.OnClickListener() {
+            builder.setNegativeButton("설정", new DialogInterface.OnClickListener() {
                 @Override
                 public void onClick(DialogInterface dialogInterface, int i) {
                     Intent callGPSSettingIntent =
@@ -426,7 +498,7 @@ public class Home extends Fragment
                     startActivityForResult(callGPSSettingIntent, GPS_ENABLE_REQUEST_CODE);
                 }
             });
-            builder.setNegativeButton("취소", new DialogInterface.OnClickListener() {
+            builder.setPositiveButton("취소", new DialogInterface.OnClickListener() {
                 @Override
                 public void onClick(DialogInterface dialogInterface, int i) {
                     dialogInterface.cancel();
@@ -481,11 +553,39 @@ public class Home extends Fragment
     @Override
     public void onLocationChanged(Location location) {
         Log.i(TAG, "onLocationChanged call..");
-
-        searchCurrentPlaces();
+        getDeviceLocation();
+        //  searchCurrentPlaces();
     }
 
+    public void getDeviceLocation() {
+        if (googleApiClient != null) {
+            if (ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                // TODO: Consider calling
+                //    ActivityCompat#requestPermissions
+                // here to request the missing permissions, and then overriding
+                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                //                                          int[] grantResults)
+                // to handle the case where the user grants the permission. See the documentation
+                // for ActivityCompat#requestPermissions for more details.
+                return;
+            }
+            mLastKnownLocation = LocationServices.FusedLocationApi.getLastLocation(googleApiClient);
+            this.googleMap.moveCamera(CameraUpdateFactory.newLatLng(new LatLng(mLastKnownLocation.getLatitude(),mLastKnownLocation.getLongitude())));
+            // this.googleMap.moveCamera(CameraUpdateFactory.newLatLng(currentLocation));
 
+            nowLocation=new LatLng(mLastKnownLocation.getLatitude(),mLastKnownLocation.getLongitude());
+            if (previousLocation != null){
+
+                polylines.add(this.googleMap.addPolyline(new PolylineOptions().geodesic(true).add(previousLocation, nowLocation)));
+
+                polylineLength+=computeDistanceBetween(previousLocation,nowLocation);
+                Toast.makeText(getContext(), String.valueOf(polylineLength) , Toast.LENGTH_SHORT).show();
+            }
+            previousLocation = nowLocation;
+
+        }
+
+    }
     private void searchCurrentPlaces() {
 
         if (googleApiClient != null) {
@@ -526,8 +626,27 @@ public class Home extends Fragment
             });
         }
 
-
     }
 
 
+/*
+    private LatLng startLatLng = new LatLng(0, 0);        //polyline 시작점
+    private LatLng endLatLng = new LatLng(0, 0);
+
+    private void changeWalkState(){
+        if(!walkState) {
+            Toast.makeText(getActivity(), "걸음 시작", Toast.LENGTH_SHORT).show();
+            walkState = true;
+            startLatLng = new LatLng(mCurrentLocation.getLatitude(), mCurrentLocation.getLongitude());        //현재 위치를 시작점으로 설정
+        }else{
+            Toast.makeText(getActivity(), "걸음 종료", Toast.LENGTH_SHORT).show();
+            walkState = false;
+        }
+    }
+    private void drawPath(){        //polyline을 그려주는 메소드
+        PolylineOptions options = new PolylineOptions().add(startLatLng).add(endLatLng).width(15).color(Color.BLACK).geodesic(true);
+        mMap.addPolyline(options);
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(startLatLng, 18));
+    }
+*/
 }

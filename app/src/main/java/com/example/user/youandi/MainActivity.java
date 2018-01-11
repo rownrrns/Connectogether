@@ -4,7 +4,6 @@ import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.constraint.ConstraintLayout;
 import android.support.design.widget.BottomNavigationView;
-import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentTransaction;
 import android.support.v7.app.AppCompatActivity;
@@ -49,7 +48,7 @@ public class MainActivity extends AppCompatActivity {
                         currentContent = Constants.NAVIGATION_PAINT;
                         fragmentManager = getSupportFragmentManager();
                         fragmentTransaction = fragmentManager.beginTransaction();
-                        fragmentTransaction.replace(R.id.contents, new Paper());
+                        fragmentTransaction.replace(R.id.contents, new Trace());
                         fragmentTransaction.commit();
                         fragmentManager.executePendingTransactions();
                     }

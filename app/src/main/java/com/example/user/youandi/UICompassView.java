@@ -23,13 +23,13 @@ public class UICompassView extends View {
     public UICompassView(Context ctx) {
         super(ctx);
 
-        this.mCompass = ctx.getResources().getDrawable(R.drawable.ic_send_black_24dp);
+        this.mCompass = ctx.getResources().getDrawable(R.drawable.ic_arrow_upward_black_24dp);
     }
 
     protected void onDraw(Canvas canvas) {
         canvas.save();
 
-        canvas.rotate(-360 + mAzimuth, PADDING + mCompass.getMinimumWidth()
+        canvas.rotate( mAzimuth, PADDING + mCompass.getMinimumWidth()
                 / 2, PADDING + mCompass.getMinimumHeight() / 2);
         mCompass.setBounds(PADDING, PADDING, PADDING
                 + mCompass.getMinimumWidth(), PADDING

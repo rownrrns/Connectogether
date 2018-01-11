@@ -14,7 +14,7 @@
         android:theme="@style/AppTheme">
         <activity android:name=".Home" />
         <activity android:name=".Youandi" />
-        <activity android:name=".Paper" />
+        <activity android:name=".Trace" />
         <activity android:name=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -25,7 +25,7 @@
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyCCvMz-Awew0RaLbRG0YhsoU9K3blSjMS4"/>
-
+        <uses-library android:name="com.google.android.maps"/>
     </application>
 
 </manifest>
